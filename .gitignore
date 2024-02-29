@@ -1,0 +1,10 @@
+# Prevent DS_Store files from being commited
+**/.DS_Store
+
+# Prevent .o, .exe, .out from being commited
+*.o
+*.exe
+*.out
+
+# Compiled class file
+*.class
