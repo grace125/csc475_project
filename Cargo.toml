@@ -1,15 +1,15 @@
 [package]
-name = "project"
+name = "mir_project"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-# [profile.dev]
-# opt-level = 1
+[profile.dev]
+opt-level = 1
 
-# [profile.dev.package."*"]
-# opt-level = 3
+[profile.dev.package."*"]
+opt-level = 3
 
 # [features]
 # default = ["debug"]
@@ -20,6 +20,9 @@ anyhow = "1.0.80"
 bevy = "0.13.0"
 cpal = "0.15.2"
 crossbeam-channel = "0.5.12"
+ron = "0.8.1"
+serde = "1.0.197"
+thiserror = "1.0.57"
 
 [dev-dependencies]
 clap = { version = "4.5.1", features = ["derive"] }

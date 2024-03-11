@@ -1,12 +1,14 @@
 use bevy::prelude::*;
-use mic::{Mic, MicInstruction};
-
-pub mod mic;
+use mir_project::{
+    songs::SongPlugin,
+    mic::{MicPlugin, Mic, MicInstruction}
+};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(mic::MicPlugin)
+        .add_plugins(MicPlugin)
+        .add_plugins(SongPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, print_mir_data)
         .run()
