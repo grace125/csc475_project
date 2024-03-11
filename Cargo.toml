@@ -1,0 +1,26 @@
+[package]
+name = "project"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# [profile.dev]
+# opt-level = 1
+
+# [profile.dev.package."*"]
+# opt-level = 3
+
+# [features]
+# default = ["debug"]
+# debug = ["bevy/dynamic_linking"]
+
+[dependencies]
+anyhow = "1.0.80"
+bevy = "0.13.0"
+cpal = "0.15.2"
+crossbeam-channel = "0.5.12"
+
+[dev-dependencies]
+clap = { version = "4.5.1", features = ["derive"] }
+hound = "3.5.1"
