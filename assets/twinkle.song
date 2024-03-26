@@ -1,0 +1,69 @@
+(
+	backing: None,
+	bpm: 80,
+	notes: [
+		(tab: C2, fret: 3, beat: 0.0),	//bar 1
+		(tab: C2, fret: 3, beat: 1.0),
+		(tab: G2, fret: 0, beat: 2.0),
+		(tab: G2, fret: 0, beat: 3.0),
+
+		(tab: A3, fret: 2, beat: 4.0),	//bar 2
+		(tab: B3, fret: 0, beat: 4.5),
+		(tab: C3, fret: 1, beat: 5.0),
+		(tab: A3, fret: 2, beat: 5.5),
+		(tab: G2, fret: 0, beat: 6.0),	//half note
+
+		(tab: F2, fret: 3, beat: 8.0),	//bar 3
+		(tab: F2, fret: 3, beat: 9.0),
+		(tab: E2, fret: 2, beat: 10.0),
+		(tab: E2, fret: 2, beat: 11.0),
+
+		(tab: D2, fret: 0, beat: 12.0),	//bar 4
+		(tab: E2, fret: 2, beat: 12.5),
+		(tab: F2, fret: 3, beat: 13.0),
+		(tab: D2, fret: 0, beat: 13.5),
+		(tab: C2, fret: 3, beat: 14.0), //half note
+
+		(tab: G2, fret: 0, beat: 16.0),	//bar 5
+		(tab: G2, fret: 0, beat: 17.0),
+		(tab: F2, fret: 3, beat: 18.0),
+		(tab: F2, fret: 3, beat: 19.0),
+
+		(tab: E2, fret: 2, beat: 20.0),	//bar 6
+		(tab: E2, fret: 2, beat: 21.0),
+		(tab: D2, fret: 0, beat: 22.0),	//half note
+
+		(tab: G2, fret: 0, beat: 23.0),	//bar 7
+		(tab: G2, fret: 0, beat: 24.0),
+		(tab: F2, fret: 3, beat: 25.0),
+		(tab: F2, fret: 3, beat: 26.0),
+
+		(tab: E2, fret: 2, beat: 27.0),	//bar 8
+		(tab: D2, fret: 0, beat: 27.5),
+		(tab: C2, fret: 3, beat: 28.0),
+		(tab: E2, fret: 2, beat: 28.5),
+		(tab: D2, fret: 0, beat: 29.0),	//half note
+
+		(tab: C2, fret: 3, beat: 31.0),	//bar 9
+		(tab: C2, fret: 3, beat: 32.0),
+		(tab: G2, fret: 0, beat: 33.0),
+		(tab: G2, fret: 0, beat: 34.0),
+
+		(tab: A3, fret: 2, beat: 35.0),	//bar10
+		(tab: B3, fret: 0, beat: 35.5),
+		(tab: C3, fret: 1, beat: 36.0),
+		(tab: A3, fret: 2, beat: 36.5),
+		(tab: G2, fret: 0, beat: 37.0),	//half note
+
+		(tab: F2, fret: 3, beat: 39.0),	//bar 11
+		(tab: F2, fret: 3, beat: 40.0),
+		(tab: E2, fret: 2, beat: 41.0),
+		(tab: E2, fret: 2, beat: 42.0),
+
+		(tab: D2, fret: 0, beat: 43.0),	//bar12
+		(tab: E2, fret: 2, beat: 43.5),
+		(tab: F2, fret: 3, beat: 44.0),
+		(tab: D2, fret: 0, beat: 44.5),
+		(tab: C2, fret: 3, beat: 45.0), //half note
+	]
+)
