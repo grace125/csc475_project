@@ -168,10 +168,6 @@ fn note_animator(
 fn display_game(mut gizmos: Gizmos, notes: Query<&mut Transform, With<Note>>) {
 
     let columns = [tab_to_column(Tab::E2), tab_to_column(Tab::A2), tab_to_column(Tab::D3), tab_to_column(Tab::G3), tab_to_column(Tab::B3), tab_to_column(Tab::E4)];
-    
-    for column in columns.iter() {
-        gizmos.line_2d(Vec2::new(*column, -HEIGHT/2.0), Vec2::new(*column, HEIGHT/2.0), Color::WHITE);
-    }
 
     for note in notes.iter() {
         gizmos.circle_2d(note.translation.xy(), NOTE_RADIUS, NOTE_COLOR);
