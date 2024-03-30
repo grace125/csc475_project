@@ -2,7 +2,7 @@
     backing: None,
     bpm: 80,
     notes: [
-        	(tab: D3, fret: 0, beat: 0.0),	//m.1
+        (tab: D3, fret: 0, beat: 0.0),	//m.1
 		(tab: G3, fret: 2, beat: 0.5),
 		(tab: D3, fret: 3, beat: 1.0),
 		(tab: G3, fret: 2, beat: 1.5),
