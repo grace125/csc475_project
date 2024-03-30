@@ -1,5 +1,5 @@
 (
-    backing: None,
+    backing: Some("songs/sound-of-silence.ogg"),
     bpm: 80,
     notes: [
         (tab: D3, fret: 0, beat: 0.0),	//m.1
@@ -127,7 +127,7 @@
 		(tab: D3, fret: 0, beat: 54.0),	//m.15
 		(tab: G3, fret: 2, beat: 54.5),
 		(tab: D3, fret: 3, beat: 55.0),
-		(tab: B3: fret: 1, beat: 55.5),
+		(tab: B3, fret: 1, beat: 55.5),
 
 		(tab: A2, fret: 3, beat: 56.0),	//m.16
 		(tab: G3, fret: 0, beat: 56.5),
