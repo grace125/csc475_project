@@ -33,37 +33,37 @@
 		(tab: D3, fret: 2, beat: 21.0),
 		(tab: D3, fret: 0, beat: 22.0),	//half note
 
-		(tab: G3, fret: 0, beat: 23.0),	//bar 7
-		(tab: G3, fret: 0, beat: 24.0),
-		(tab: D3, fret: 3, beat: 25.0),
+		(tab: G3, fret: 0, beat: 24.0),	//bar 7
+		(tab: G3, fret: 0, beat: 25.0),
 		(tab: D3, fret: 3, beat: 26.0),
+		(tab: D3, fret: 3, beat: 27.0),
 
-		(tab: D3, fret: 2, beat: 27.0),	//bar 8
-		(tab: D3, fret: 0, beat: 27.5),
-		(tab: A2, fret: 3, beat: 28.0),
-		(tab: D3, fret: 2, beat: 28.5),
-		(tab: D3, fret: 0, beat: 29.0),	//half note
+		(tab: D3, fret: 2, beat: 28.0),	//bar 8
+		(tab: D3, fret: 0, beat: 28.5),
+		(tab: A2, fret: 3, beat: 29.0),
+		(tab: D3, fret: 2, beat: 29.5),
+		(tab: D3, fret: 0, beat: 30.0),	//half note
 
-		(tab: A2, fret: 3, beat: 31.0),	//bar 9
-		(tab: A2, fret: 3, beat: 32.0),
-		(tab: G3, fret: 0, beat: 33.0),
+		(tab: A2, fret: 3, beat: 32.0),	//bar 9
+		(tab: A2, fret: 3, beat: 33.0),
 		(tab: G3, fret: 0, beat: 34.0),
+		(tab: G3, fret: 0, beat: 35.0),
 
-		(tab: G3, fret: 2, beat: 35.0),	//bar10
-		(tab: B3, fret: 0, beat: 35.5),
-		(tab: B3, fret: 1, beat: 36.0),
-		(tab: G3, fret: 2, beat: 36.5),
-		(tab: G3, fret: 0, beat: 37.0),	//half note
+		(tab: G3, fret: 2, beat: 36.0),	//bar10
+		(tab: B3, fret: 0, beat: 36.5),
+		(tab: B3, fret: 1, beat: 37.0),
+		(tab: G3, fret: 2, beat: 37.5),
+		(tab: G3, fret: 0, beat: 38.0),	//half note
 
-		(tab: D3, fret: 3, beat: 39.0),	//bar 11
-		(tab: D3, fret: 3, beat: 40.0),
-		(tab: D3, fret: 2, beat: 41.0),
+		(tab: D3, fret: 3, beat: 40.0),	//bar 11
+		(tab: D3, fret: 3, beat: 41.0),
 		(tab: D3, fret: 2, beat: 42.0),
+		(tab: D3, fret: 2, beat: 43.0),
 
-		(tab: D3, fret: 0, beat: 43.0),	//bar12
-		(tab: D3, fret: 2, beat: 43.5),
-		(tab: D3, fret: 3, beat: 44.0),
-		(tab: D3, fret: 0, beat: 44.5),
-		(tab: A2, fret: 3, beat: 45.0), //half note
+		(tab: D3, fret: 0, beat: 44.0),	//bar12
+		(tab: D3, fret: 2, beat: 44.5),
+		(tab: D3, fret: 3, beat: 45.0),
+		(tab: D3, fret: 0, beat: 45.5),
+		(tab: A2, fret: 3, beat: 46.0), //half note
 	]
 )
