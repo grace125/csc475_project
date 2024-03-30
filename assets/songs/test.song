@@ -1,14 +1,14 @@
 (
-    backing: Some("song.ogg"),
+    backing: None,
     bpm: 80,
     notes: [
-        (tab: A2, fret: 3, beat: 0.0),
-        (tab: D3, fret: 0, beat: 0.5),
-        (tab: D3, fret: 2, beat: 1.0),
-        (tab: D3, fret: 3, beat: 1.5),
-        (tab: G3, fret: 0, beat: 2.0),
-        (tab: G3, fret: 2, beat: 2.5),
-        (tab: B3, fret: 0, beat: 3.0),
-        (tab: B3, fret: 1, beat: 3.5),
+        (tab: A2, fret: 3, beat: 3.0),
+        (tab: D3, fret: 0, beat: 3.5),
+        (tab: D3, fret: 2, beat: 4.0),
+        (tab: D3, fret: 3, beat: 4.5),
+        (tab: G3, fret: 0, beat: 5.0),
+        (tab: G3, fret: 2, beat: 5.5),
+        (tab: B3, fret: 0, beat: 6.0),
+        (tab: B3, fret: 1, beat: 6.5),
     ]
 )

@@ -18,6 +18,7 @@ opt-level = 3
 [dependencies]
 anyhow = "1.0.80"
 bevy = "0.13.0"
+bevy_egui = "0.26.0"
 cpal = "0.15.2"
 crossbeam-channel = "0.5.12"
 ron = "0.8.1"

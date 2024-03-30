@@ -10,7 +10,7 @@ impl Plugin for SongPlugin {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 pub enum Tab {
     E2,
     A2,
@@ -20,7 +20,7 @@ pub enum Tab {
     E4
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Component)]
 pub struct Note {
     pub tab: Tab,
     pub fret: u32,
