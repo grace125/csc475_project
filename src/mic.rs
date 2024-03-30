@@ -160,6 +160,6 @@ fn new_stream(data_sender: Sender<u32>, device: &Device, config: &StreamConfig, 
 }
 
 fn process_mic_data<T: Sample + Debug>(_data_sender: &Sender<u32>, _input: &[T], _input_callback_info: &InputCallbackInfo) {
-    println!("mic data: {:?}", _input_callback_info);//input.len());
+    // println!("mic data: {:?}", _input_callback_info);//input.len());
     // data_sender.send(0);
 }

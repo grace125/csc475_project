@@ -67,6 +67,7 @@ fn settings(
     
     egui::SidePanel::left("side_panel").default_width(500.0).show(ctx, |ui| {
         ui.heading("Select Mic");
+        ui.separator();
 
         if let Some(connected_device) = &devices.connected {
             ui.label(format!("Connected device: {:?}", connected_device.name()));
@@ -117,7 +118,6 @@ fn settings(
                 }
             ));
             next_state.set(GameState::SongLoading);
-            println!("Song Selected");
         }
     });
 }
@@ -129,7 +129,6 @@ fn loading(
 ) {
     if asset_server.is_loaded_with_dependencies(&song.asset) {
         next_state.set(GameState::SongPlaying);
-        println!("Loaded");
     }
 }
 
