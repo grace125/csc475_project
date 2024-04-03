@@ -1,9 +1,11 @@
 use bevy::{prelude::*, time::Stopwatch};
 use bevy_egui::{egui, EguiContexts};
 
-use crate::{songs::{Note, Song, Tab}, GameState, HEIGHT, WIDTH};
+use crate::{mic::{MIRIntruction, Mic}, songs::{Note, Song, Tab}, GameState, HEIGHT, WIDTH};
+
 
 pub const NOTE_RADIUS: f32 = 25.0;
+
 pub const NOTE_COLOR: Color = Color::GOLD;
 pub const NOTE_FONT_SIZE: f32 = 30.0;
 pub const HIT_Y_POS: f32 = HEIGHT/4.0;
@@ -12,14 +14,15 @@ pub const DESPAWN_Y_POS: f32 = -SPAWN_Y_POS;
 pub const SCROLL_TIME: f32 = 3.25;
 pub const COLUMN_SPACE: f32 = WIDTH/7.0;
 
+pub const HIT_FORGIVENESS: f32 = 0.25;
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app .add_systems(OnExit(GameState::SongPlaying), (despawn_all::<Note>, despawn_all::<Backing>))
-            .add_systems(Update, (update_stopwatch, note_animator, display_game).chain().run_if(in_state(GameState::SongPlaying)))
+            .add_systems(Update, (update_stopwatch, rhythm_calculator, note_animator, display_game).chain().run_if(in_state(GameState::SongPlaying)))
             .add_systems(Update, post_game_info.run_if(in_state(GameState::PostSongInfo)));
-
     }
 }
 
@@ -44,6 +47,11 @@ impl CurrentSong {
     }
 }
 
+#[derive(Default, Component)]
+pub struct NoteHitData {
+    pub data: Vec<(f32, f32)>
+}
+
 fn despawn_all<T: Component>(mut commands: Commands, notes: Query<Entity, With<T>>) {
     for e in notes.iter() {
         commands.entity(e).despawn();
@@ -55,12 +63,18 @@ fn update_stopwatch(
     time: Res<Time>,
     songs: Res<Assets<Song>>,
     mut song: ResMut<CurrentSong>,
+    mic: Res<Mic>,
 ) {
     let prev_time = song.stopwatch.elapsed_secs();
     song.stopwatch.tick(time.delta());
     let this_time = song.stopwatch.elapsed_secs();
     
     if prev_time <= 0.0 && 0.0 <= this_time {
+
+        if let Some(sender) = &mic.mir_sender {
+            let _ = sender.send(MIRIntruction::SongStart);
+        }
+
         let song = songs.get(&song.asset).unwrap();
         if let Some(backing) = &song.backing {
             commands.spawn((
@@ -134,10 +148,11 @@ fn note_animator(
 
             commands.spawn((
                 (*note).clone(),
+                NoteHitData::default(),
                 TransformBundle {
                     local: Transform::from_xyz(x, y, 0.0),
                     ..default()
-                }
+                },
             )).with_children(|parent| {
                 parent.spawn(Text2dBundle {
                     text: Text::from_section(
@@ -161,6 +176,59 @@ fn note_animator(
         }
         else {
             break;
+        }
+    }
+}
+
+fn rhythm_calculator(
+    mut commands: Commands,
+    mic: Res<Mic>,
+    mut notes: Query<(Entity, &Note, &mut NoteHitData)>,
+    song_data: Res<CurrentSong>,
+    songs: Res<Assets<Song>>,
+) {
+    let bps = songs.get(&song_data.asset).unwrap().bpm / 60.0;
+
+    if let Some(mir_receiver) = &mic.mir_receiver {
+        while let Ok(fft_info) = mir_receiver.try_recv() {
+            for (e, note, mut note_hit_data) in notes.iter_mut() {
+                let note_time = note.beat / bps; 
+
+                let diff = fft_info.progress.as_secs_f32() - note_time;
+                
+                if diff > HIT_FORGIVENESS {
+                    commands.entity(e).remove::<NoteHitData>();
+
+                    println!("\nScores for note {:?}", note);
+                    for (diff, score) in note_hit_data.data.iter() {
+                        println!("{:.0} at diff {:.6}", score.floor(), *diff);
+                    }
+
+                    println!("\nScore differences :");
+                    for (d, s) in note_hit_data.data.windows(2).map(|slice| (slice[0].0, slice[0].1 - slice[1].1)) {
+                        println!("{:.0} at diff {:.6}", s.floor(), d); 
+                    }
+
+                    continue;
+                }
+                else if diff < -HIT_FORGIVENESS {
+                    continue;
+                }
+                
+                let first_harm = note.pitch();
+                let second_harm = 2.0*first_harm;
+                let third_harm = 3.0*first_harm;
+                let score = fft_info.amplitude_at(first_harm) / fft_info.rms;
+
+                // (
+                //     fft_info.amplitude_at(first_harm).powi(2) * 
+                //     fft_info.amplitude_at(second_harm) * 
+                //     fft_info.amplitude_at(third_harm)
+                // ).powf(0.25);
+
+                note_hit_data.data.push((diff, score));
+
+            }
         }
     }
 }

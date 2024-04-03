@@ -1,8 +1,9 @@
 use bevy:: prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use cpal::{traits::DeviceTrait, Device};
+use egui_plot::{Line, PlotPoints};
 
-use crate::{game::CurrentSong, mic::{Mic, MicInstruction, MicResponse}, GameState};
+use crate::{game::CurrentSong, mic::{DeviceInstruction, DeviceResponse, FFTInfo, Mic, WINDOW_SIZE}, GameState};
 
 pub struct SettingsUiPlugin;
 
@@ -29,26 +30,30 @@ enum SelectedSong {
 }
 
 fn get_devices(mic: Res<Mic>) {
-    let _ = mic.instruction_sender.send(MicInstruction::GetDevices);
+    let _ = mic.device_sender.send(DeviceInstruction::GetDevices);
 }
 
 fn mic_response_handler(
-    mic: Res<Mic>,
+    mut mic: ResMut<Mic>,
     mut available_devices: ResMut<AvailableDevices>
 ) {
     // TODO: handle this later
-    while let Ok(response) = mic.response_receiver.try_recv() {
+    while let Ok(response) = mic.device_receiver.try_recv() {
         match response {
-            MicResponse::Devices(devices) => {
+            DeviceResponse::Devices(devices) => {
                 available_devices.available = devices;
             },
-            MicResponse::DeviceConnected(dev) => {
+            DeviceResponse::DeviceConnected(dev, sender, receiver) => {
+                mic.mir_sender = Some(sender);
+                mic.mir_receiver = Some(receiver);
                 available_devices.connected = Some(dev);
             },
-            MicResponse::DeviceDisconnected => {
+            DeviceResponse::DeviceDisconnected => {
+                mic.mir_sender = None;
+                mic.mir_receiver = None;
                 available_devices.connected = None;
             },
-            MicResponse::DeviceFailedToConnect(_) => (), // error!("Failed to connect to device: {:?}", e),
+            DeviceResponse::DeviceFailedToConnect(_) => (), // error!("Failed to connect to device: {:?}", e),
         }
     }
 
@@ -62,6 +67,8 @@ fn settings(
     mut next_state: ResMut<NextState<GameState>>,
     mut devices: ResMut<AvailableDevices>,
     mic: Res<Mic>,
+    mut fft_data: Local<Vec<f32>>,
+    mut srate: Local<f64>,
 ) {
     let ctx = contexts.ctx_mut();
     
@@ -72,7 +79,7 @@ fn settings(
         if let Some(connected_device) = &devices.connected {
             ui.label(format!("Connected device: {:?}", connected_device.name()));
             if ui.button("Disconnect").clicked() {
-                let _ = mic.instruction_sender.send(MicInstruction::DisconnectFromDevice);
+                let _ = mic.device_sender.send(DeviceInstruction::DisconnectFromDevice);
             }
             ui.separator();
         }
@@ -85,16 +92,43 @@ fn settings(
             };
             if ui.button(name).clicked() {
                 let device = devices.available.remove(index);
-                let _ = mic.instruction_sender.send(MicInstruction::ConnectToDevice(device));
-                let _ = mic.instruction_sender.send(MicInstruction::GetDevices);
+                let _ = mic.device_sender.send(DeviceInstruction::ConnectToDevice(device));
+                let _ = mic.device_sender.send(DeviceInstruction::GetDevices);
             }
         }
 
         ui.separator();
 
         if ui.button("Refresh").clicked() {
-            let _ = mic.instruction_sender.send(MicInstruction::GetDevices);
+            let _ = mic.device_sender.send(DeviceInstruction::GetDevices);
         }
+
+        if let Some(mir_receiver) = &mic.mir_receiver {
+            while let Ok(FFTInfo { data, progress, srate: s, .. }) = mir_receiver.try_recv() {
+                println!("Amplitude {:?} at time {:?}", data[18], progress);
+                *fft_data = data;
+                *srate = s as f64;
+            }
+        }
+        else {
+            *fft_data = Vec::new()
+        }
+
+        ui.separator();
+
+        if !fft_data.is_empty() {
+            let fft_line: PlotPoints = fft_data[0..fft_data.len()/2].iter().enumerate().skip(1).map(|(x, y)| {
+                let x = (x as f64 * *srate / WINDOW_SIZE as f64).log2();
+                let y = *y as f64;
+                [x, y]
+            }).collect();
+            let fft_line = Line::new(fft_line);
+            
+            egui_plot::Plot::new("FFT").include_y(200.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
+                plot_ui.line(fft_line)
+            });
+        }
+        
     });
 
     egui::CentralPanel::default().show(ctx, |ui| {
