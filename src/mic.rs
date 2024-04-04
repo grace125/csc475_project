@@ -2,11 +2,11 @@
 use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, BuildStreamError, DefaultStreamConfigError, Device, InputCallbackInfo, SampleFormat, Stream, StreamConfig, StreamInstant};
 use bevy::prelude::*;
 use rustfft::{num_complex::{Complex, ComplexFloat}, Fft, FftPlanner};
-use std::{fmt::Debug, mem::swap, sync::Arc, time::Duration};
+use std::{collections::VecDeque, fmt::Debug, sync::Arc, time::Duration};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
-pub const WINDOW_SIZE: usize = 4096; //2048; //8192;
-pub const HOP_INTERVAL: usize = 2;
+pub const WINDOW_SIZE: usize = 8192;
+pub const HOP_SIZE: usize = 1024;
 
 pub struct MicPlugin;
 
@@ -70,7 +70,7 @@ pub struct MagnitudeSpectrum {
     pub data: Vec<f32>,
     pub progress: Duration,
     pub srate: f32,
-    pub mean_squared: f32
+    pub rms: f32
 }
 
 impl MagnitudeSpectrum {
@@ -179,8 +179,8 @@ fn new_stream(device: &Device, config: &StreamConfig, sample_format: SampleForma
     let (mir_instruction_sender, mir_instruction_receiver) = unbounded();
     let (mir_response_sender, mir_response_receiver) = unbounded();
 
-    let mut buffer = Vec::with_capacity(2*WINDOW_SIZE);
-    let mut buffer_next = Vec::with_capacity(2*WINDOW_SIZE);
+    let mut buffer: Vec<Complex<f32>> = Vec::with_capacity(WINDOW_SIZE);
+    let mut pre_buffer: VecDeque<f32> = VecDeque::with_capacity(2*WINDOW_SIZE);
 
     let hann = (0..WINDOW_SIZE).into_iter().map(|x| hann(x as f32, WINDOW_SIZE as f32)).collect::<Vec<_>>();
     let fft = FftPlanner::<f32>::new().plan_fft_forward(WINDOW_SIZE);
@@ -189,75 +189,62 @@ fn new_stream(device: &Device, config: &StreamConfig, sample_format: SampleForma
 
     let srate = config.sample_rate.0 as f32;
 
-    let mut buffers_never_filled: bool = true;
-
     println!("{:?}", config);
     match sample_format {
         cpal::SampleFormat::F32 => device.build_input_stream(config, move |data: &[f32], callback_info| {
 
-            update_song_start(&mir_instruction_receiver, &mut song_start, &mut buffer, &mut buffer_next, callback_info);
+            handle_instructions(&mir_instruction_receiver, &mut song_start, &mut buffer, &mut pre_buffer, callback_info);
 
-            let start_to_capture = start_to_capture(&song_start, &callback_info);
-            let start_to_data = start_to_capture.saturating_sub(Duration::from_secs_f32((buffer.len() + data.len()) as f32 / srate));
-            
-            fill_buffers(data, &mut buffer, &mut buffer_next);
-            
-            let sections = buffer.len() / WINDOW_SIZE;
-            for w in (0..sections).map(|n| n*WINDOW_SIZE) {
-                let progress = start_to_data + Duration::from_secs_f32(w as f32 / srate);
-                let buffer = &mut buffer[w..w+WINDOW_SIZE];
-                let mean_squared = (buffer.iter().map(|c| c.re*c.re).sum::<f32>() / WINDOW_SIZE as f32).sqrt();
-                
-                let fft_result = calculate_spectrogram(&fft, &hann, buffer);
+            pre_buffer.extend(data);
+
+            let start_progress = start_to_capture(&song_start, &callback_info).saturating_sub(Duration::from_secs_f32(pre_buffer.len() as f32 / srate));
+
+            let mut h = 0;
+            while h + WINDOW_SIZE < pre_buffer.len() {
+                let progress = start_progress + Duration::from_secs_f32(h as f32 / srate);
+                buffer.extend(pre_buffer.iter().skip(h).take(WINDOW_SIZE).map(to_complex));
+
+                let rms = buffer.iter().map(|c| c.re*c.re).sum::<f32>() / WINDOW_SIZE as f32;
+
+                let fft_result = calculate_spectrogram(&fft, &hann, &mut buffer[0..WINDOW_SIZE]);
 
                 let _ = mir_response_sender.send(MagnitudeSpectrum {
                     data: fft_result, 
-                    mean_squared,
+                    rms,
                     progress, 
                     srate
                 });
+                
+                buffer.drain(..);
+                h += HOP_SIZE;
             }
 
-            if sections != 0 { 
-                buffer.drain(..);
-                swap(&mut buffer, &mut buffer_next);
-            }
+            pre_buffer.drain(..h);
+
         }, e, None),
         _ => todo!()
     }.map(|s| (s, mir_instruction_sender, mir_response_receiver))
 }
 
 #[inline]
-fn update_song_start(
+fn handle_instructions(
     mir_instruction_receiver: &Receiver<MIRIntruction>, 
     song_start: &mut Option<StreamInstant>, 
-    buffer: &mut Vec<Complex<f32>>, 
-    buffer_next: &mut Vec<Complex<f32>>, 
+    buffer: &mut Vec<Complex<f32>>,
+    pre_buffer: &mut VecDeque<f32>,
     callback_info: &InputCallbackInfo
 ) {
     match mir_instruction_receiver.try_recv() {
         Ok(MIRIntruction::SongStart) => {
             *song_start = None;
             buffer.drain(..);
-            buffer_next.drain(..);
+            pre_buffer.drain(..);
         },
         Err(_) => {},
     }
 
     if *song_start == None {
         *song_start = Some(callback_info.timestamp().capture);
-    }
-}
-
-#[inline]
-fn fill_buffers(data: &[f32], buffer: &mut Vec<Complex<f32>>, buffer_next: &mut Vec<Complex<f32>>) {
-    if data.len() + buffer.len() < WINDOW_SIZE {
-        buffer.extend(data.iter().map(to_complex));
-    }
-    else {
-        let mid = data.len().saturating_sub((data.len() + buffer.len()) % WINDOW_SIZE);
-        buffer.extend(data[..mid].iter().map(to_complex));
-        buffer_next.extend(data[mid..].iter().map(to_complex));
     }
 }
 
