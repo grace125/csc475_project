@@ -1,11 +1,12 @@
 
-use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, BuildStreamError, DefaultStreamConfigError, Device, SampleFormat, Stream, StreamConfig};
+use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, BuildStreamError, DefaultStreamConfigError, Device, InputCallbackInfo, SampleFormat, Stream, StreamConfig, StreamInstant};
 use bevy::prelude::*;
-use rustfft::{num_complex::{Complex, ComplexFloat}, FftPlanner};
-use std::{fmt::Debug, mem::swap, time::Duration};
+use rustfft::{num_complex::{Complex, ComplexFloat}, Fft, FftPlanner};
+use std::{fmt::Debug, mem::swap, sync::Arc, time::Duration};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
 pub const WINDOW_SIZE: usize = 4096; //2048; //8192;
+pub const HOP_INTERVAL: usize = 2;
 
 pub struct MicPlugin;
 
@@ -19,7 +20,7 @@ impl Plugin for MicPlugin {
 #[derive(Resource)]
 pub struct Mic {
     pub mir_sender: Option<Sender<MIRIntruction>>,
-    pub mir_receiver: Option<Receiver<FFTInfo>>,
+    pub mir_receiver: Option<Receiver<MagnitudeSpectrum>>,
     pub device_receiver: Receiver<DeviceResponse>,
     pub device_sender: Sender<DeviceInstruction>,
 }
@@ -44,7 +45,7 @@ impl Debug for DeviceInstruction {
 
 pub enum DeviceResponse {
     Devices(Vec<Device>),
-    DeviceConnected(Device, Sender<MIRIntruction>, Receiver<FFTInfo>),
+    DeviceConnected(Device, Sender<MIRIntruction>, Receiver<MagnitudeSpectrum>),
     DeviceFailedToConnect(MicConnectionError),
     DeviceDisconnected,
 }
@@ -63,22 +64,22 @@ impl Debug for DeviceResponse {
 
 pub enum MIRIntruction {
     SongStart,
-    ListenFor,
 }
 
-pub struct FFTInfo {
+pub struct MagnitudeSpectrum {
     pub data: Vec<f32>,
     pub progress: Duration,
     pub srate: f32,
-    pub rms: f32
+    pub mean_squared: f32
 }
 
-impl FFTInfo {
+impl MagnitudeSpectrum {
     pub fn amplitude_at(&self, pitch: f32) -> f32 {
         let continuous_bin = pitch / self.srate * WINDOW_SIZE as f32;
-        let left_bin = continuous_bin.floor() as usize;
+        let left_bin = (continuous_bin.floor() as usize) % self.data.len();
+        let right_bin = (left_bin + 1) % self.data.len();
         let t = continuous_bin % 1.0;
-        self.data[left_bin]*(1.0-t) + self.data[left_bin+1]*t
+        self.data[left_bin]*(1.0-t) + self.data[right_bin]*t
     }
 }
 
@@ -172,86 +173,117 @@ fn try_device_connect(response_sender: Sender<DeviceResponse>, data: &mut Option
 }
 
 #[inline]
-fn new_stream(device: &Device, config: &StreamConfig, sample_format: SampleFormat) -> Result<(Stream, Sender<MIRIntruction>, Receiver<FFTInfo>), BuildStreamError> {
+fn new_stream(device: &Device, config: &StreamConfig, sample_format: SampleFormat) -> Result<(Stream, Sender<MIRIntruction>, Receiver<MagnitudeSpectrum>), BuildStreamError> {
     let e = move |err| error!("an error occurred on stream: {}", err);
 
     let (mir_instruction_sender, mir_instruction_receiver) = unbounded();
     let (mir_response_sender, mir_response_receiver) = unbounded();
 
-    let mut buffer = Vec::new();
+    let mut buffer = Vec::with_capacity(2*WINDOW_SIZE);
     let mut buffer_next = Vec::with_capacity(2*WINDOW_SIZE);
+
+    let hann = (0..WINDOW_SIZE).into_iter().map(|x| hann(x as f32, WINDOW_SIZE as f32)).collect::<Vec<_>>();
     let fft = FftPlanner::<f32>::new().plan_fft_forward(WINDOW_SIZE);
 
     let mut song_start = None;
 
     let srate = config.sample_rate.0 as f32;
 
+    let mut buffers_never_filled: bool = true;
+
     println!("{:?}", config);
     match sample_format {
         cpal::SampleFormat::F32 => device.build_input_stream(config, move |data: &[f32], callback_info| {
 
-            match mir_instruction_receiver.try_recv() {
-                Ok(MIRIntruction::ListenFor) => todo!(),
-                Ok(MIRIntruction::SongStart) => {
-                    song_start = None;
-                    buffer.drain(..);
-                    buffer_next.drain(..);
-                },
-                Err(_) => {},
-            }
+            update_song_start(&mir_instruction_receiver, &mut song_start, &mut buffer, &mut buffer_next, callback_info);
 
-            if song_start == None {
-                song_start = Some(callback_info.timestamp().capture);
-                return;
-            }
-            let song_start = song_start.unwrap();
-            let capture = callback_info.timestamp().capture.duration_since(&song_start).unwrap();
+            let start_to_capture = start_to_capture(&song_start, &callback_info);
+            let start_to_data = start_to_capture.saturating_sub(Duration::from_secs_f32((buffer.len() + data.len()) as f32 / srate));
             
-            if data.len() + buffer.len() < WINDOW_SIZE {
-                buffer.extend(data.iter().map(to_complex));
-            }
-            else {
-                let mid = data.len().saturating_sub((data.len() + buffer.len()) % WINDOW_SIZE);
-                buffer      .extend(data[..mid].iter().map(to_complex));
-                buffer_next .extend(data[mid..].iter().map(to_complex));
-            }
-
+            fill_buffers(data, &mut buffer, &mut buffer_next);
+            
             let sections = buffer.len() / WINDOW_SIZE;
-
-            // println!("{:?}; {:?}; {:?}", sections, buffer.len(), buffer_next.len());
-
-            if sections == 0 { return; }
-
-            let start = capture.saturating_sub(Duration::from_secs_f32((buffer.len() + buffer_next.len()) as f32 / srate));
-            
             for w in (0..sections).map(|n| n*WINDOW_SIZE) {
-                
+                let progress = start_to_data + Duration::from_secs_f32(w as f32 / srate);
                 let buffer = &mut buffer[w..w+WINDOW_SIZE];
-
-                let rms = (buffer.iter().map(|c| c.re*c.re).sum::<f32>() / WINDOW_SIZE as f32).sqrt();
+                let mean_squared = (buffer.iter().map(|c| c.re*c.re).sum::<f32>() / WINDOW_SIZE as f32).sqrt();
                 
-                fft.process(buffer);
+                let fft_result = calculate_spectrogram(&fft, &hann, buffer);
 
-                let fft_result: Vec<f32> = buffer.iter().map(|c| c.abs()).collect();
-
-                let progress = start + Duration::from_secs_f32(w as f32 / srate);
-
-                let _ = mir_response_sender.send(FFTInfo {
+                let _ = mir_response_sender.send(MagnitudeSpectrum {
                     data: fft_result, 
-                    rms,
+                    mean_squared,
                     progress, 
                     srate
                 });
             }
 
-            buffer.drain(..);
-            swap(&mut buffer, &mut buffer_next);
-
+            if sections != 0 { 
+                buffer.drain(..);
+                swap(&mut buffer, &mut buffer_next);
+            }
         }, e, None),
         _ => todo!()
     }.map(|s| (s, mir_instruction_sender, mir_response_receiver))
 }
 
+#[inline]
+fn update_song_start(
+    mir_instruction_receiver: &Receiver<MIRIntruction>, 
+    song_start: &mut Option<StreamInstant>, 
+    buffer: &mut Vec<Complex<f32>>, 
+    buffer_next: &mut Vec<Complex<f32>>, 
+    callback_info: &InputCallbackInfo
+) {
+    match mir_instruction_receiver.try_recv() {
+        Ok(MIRIntruction::SongStart) => {
+            *song_start = None;
+            buffer.drain(..);
+            buffer_next.drain(..);
+        },
+        Err(_) => {},
+    }
+
+    if *song_start == None {
+        *song_start = Some(callback_info.timestamp().capture);
+    }
+}
+
+#[inline]
+fn fill_buffers(data: &[f32], buffer: &mut Vec<Complex<f32>>, buffer_next: &mut Vec<Complex<f32>>) {
+    if data.len() + buffer.len() < WINDOW_SIZE {
+        buffer.extend(data.iter().map(to_complex));
+    }
+    else {
+        let mid = data.len().saturating_sub((data.len() + buffer.len()) % WINDOW_SIZE);
+        buffer.extend(data[..mid].iter().map(to_complex));
+        buffer_next.extend(data[mid..].iter().map(to_complex));
+    }
+}
+
+#[inline]
+fn calculate_spectrogram(fft: &Arc<dyn Fft<f32>>, window_func: &Vec<f32>, buffer: &mut [Complex<f32>]) -> Vec<f32> {
+    for (i, c) in buffer.iter_mut().enumerate() {
+        *c *= to_complex(&window_func[i])
+    }
+    fft.process(buffer);
+    buffer.iter().map(|c| c.abs()).collect()
+}
+
+#[inline]
+fn hann(x: f32, m: f32) -> f32 {
+    (1.0 + (std::f32::consts::TAU*x/m + std::f32::consts::PI).cos())/2.0
+}
+
+#[inline]
+fn start_to_capture(
+    song_start: &Option<StreamInstant>, 
+    callback_info: &InputCallbackInfo
+) -> Duration {
+    callback_info.timestamp().capture.duration_since(&song_start.unwrap()).unwrap()
+}
+
+#[inline]
 fn to_complex(v: &f32) -> Complex<f32> {
     Complex {re: *v, im: 0.0}
 }

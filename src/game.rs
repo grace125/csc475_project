@@ -1,7 +1,7 @@
 use bevy::{prelude::*, time::Stopwatch};
 use bevy_egui::{egui, EguiContexts};
 
-use crate::{mic::{MIRIntruction, Mic}, songs::{Note, Song, Tab}, GameState, HEIGHT, WIDTH};
+use crate::{mic::{MIRIntruction, MagnitudeSpectrum, Mic}, songs::{Note, Song, Tab}, GameState, HEIGHT, WIDTH};
 
 
 pub const NOTE_RADIUS: f32 = 25.0;
@@ -14,7 +14,9 @@ pub const DESPAWN_Y_POS: f32 = -SPAWN_Y_POS;
 pub const SCROLL_TIME: f32 = 3.25;
 pub const COLUMN_SPACE: f32 = WIDTH/7.0;
 
-pub const HIT_FORGIVENESS: f32 = 0.25;
+pub const SCORE_THRESHOLD: f32 = 350.0;
+
+pub const HIT_FORGIVENESS: f32 = 0.12;
 
 pub struct GamePlugin;
 
@@ -35,6 +37,7 @@ pub struct CurrentSong {
     pub asset: Handle<Song>,
     // pub speed: f32,
     stopwatch: Stopwatch,
+    success: usize,
 }
 
 impl CurrentSong {
@@ -43,6 +46,7 @@ impl CurrentSong {
             asset,
             stopwatch: Stopwatch::new(),
             latest_unplayed_note: 0,
+            success: 0
         }
     }
 }
@@ -54,7 +58,7 @@ pub struct NoteHitData {
 
 fn despawn_all<T: Component>(mut commands: Commands, notes: Query<Entity, With<T>>) {
     for e in notes.iter() {
-        commands.entity(e).despawn();
+        commands.entity(e).despawn_recursive();
     }
 }
 
@@ -153,6 +157,7 @@ fn note_animator(
                     local: Transform::from_xyz(x, y, 0.0),
                     ..default()
                 },
+                VisibilityBundle::default()
             )).with_children(|parent| {
                 parent.spawn(Text2dBundle {
                     text: Text::from_section(
@@ -184,7 +189,7 @@ fn rhythm_calculator(
     mut commands: Commands,
     mic: Res<Mic>,
     mut notes: Query<(Entity, &Note, &mut NoteHitData)>,
-    song_data: Res<CurrentSong>,
+    mut song_data: ResMut<CurrentSong>,
     songs: Res<Assets<Song>>,
 ) {
     let bps = songs.get(&song_data.asset).unwrap().bpm / 60.0;
@@ -202,35 +207,63 @@ fn rhythm_calculator(
                     println!("\nScores for note {:?}", note);
                     for (diff, score) in note_hit_data.data.iter() {
                         println!("{:.0} at diff {:.6}", score.floor(), *diff);
+                        if *score > SCORE_THRESHOLD {
+                            println!("Note {:?} Hit!", note);
+                            commands.entity(e).despawn_recursive();
+                            song_data.success += 1;
+                            break;
+                        }
                     }
 
-                    println!("\nScore differences :");
-                    for (d, s) in note_hit_data.data.windows(2).map(|slice| (slice[0].0, slice[0].1 - slice[1].1)) {
-                        println!("{:.0} at diff {:.6}", s.floor(), d); 
-                    }
+                    // println!("\nScore differences :");
+                    // for (d, s) in note_hit_data.data.windows(2).map(|slice| (slice[0].0, slice[0].1 - slice[1].1)) {
+                    //     println!("{:.0} at diff {:.6}", s.floor(), d); 
+                    // }
 
                     continue;
                 }
                 else if diff < -HIT_FORGIVENESS {
                     continue;
                 }
-                
-                let first_harm = note.pitch();
-                let second_harm = 2.0*first_harm;
-                let third_harm = 3.0*first_harm;
-                let score = fft_info.amplitude_at(first_harm) / fft_info.rms;
 
-                // (
-                //     fft_info.amplitude_at(first_harm).powi(2) * 
-                //     fft_info.amplitude_at(second_harm) * 
-                //     fft_info.amplitude_at(third_harm)
-                // ).powf(0.25);
+                let score = calculate_score(note.pitch(), &fft_info);
+
 
                 note_hit_data.data.push((diff, score));
 
             }
         }
     }
+}
+
+pub fn calculate_score(pitch: f32, spectrum: &MagnitudeSpectrum) -> f32 {
+    let first_harm = pitch;
+    let second_harm = 2.0*first_harm;
+    let third_harm = 3.0*first_harm;
+
+    // let score = (
+    //     spectrum.amplitude_at(first_harm).powi(4)
+    //     * spectrum.amplitude_at(second_harm).powi(2)
+    //     * spectrum.amplitude_at(third_harm)
+    // ).powf(1.0/7.0);
+
+    let score = (
+        spectrum.amplitude_at(first_harm).powi(2)
+        * spectrum.amplitude_at(second_harm)
+        * spectrum.amplitude_at(third_harm)
+    ).powf(0.25);
+
+    // let score = (
+    //     4.0*spectrum.amplitude_at(first_harm)
+    //     + 2.0*spectrum.amplitude_at(second_harm)
+    //     + spectrum.amplitude_at(third_harm)
+    // ).powf(1.0/7.0);
+    
+    // let score = spectrum.amplitude_at(first_harm);
+    // let score = score / spectrum.mean_squared.sqrt(); //.max(0.05);
+    // let score = score / spectrum.mean_squared;
+
+    score
 }
 
 fn display_game(mut gizmos: Gizmos, notes: Query<&mut Transform, With<Note>>) {
@@ -250,7 +283,8 @@ fn display_game(mut gizmos: Gizmos, notes: Query<&mut Transform, With<Note>>) {
 fn post_game_info(
     mut contexts: EguiContexts,
     mut next_state: ResMut<NextState<GameState>>,
-
+    song_data: Res<CurrentSong>,
+    songs: Res<Assets<Song>>,
 ) {
 
     let ctx = contexts.ctx_mut();
@@ -260,6 +294,12 @@ fn post_game_info(
         ui.heading("Stats");
         ui.separator();
 
+        ui.label(format!("Notes hit: {}", song_data.success));
+
+        let total_notes = songs.get(&song_data.asset).unwrap().notes.len();
+        ui.label(format!("Total notes: {}", total_notes));
+
+        ui.separator();
         if ui.button("Main Menu").clicked() {
             next_state.set(GameState::Settings);
         }

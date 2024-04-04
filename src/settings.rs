@@ -1,9 +1,9 @@
 use bevy:: prelude::*;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{egui::{self, Color32}, EguiContexts};
 use cpal::{traits::DeviceTrait, Device};
 use egui_plot::{Line, PlotPoints};
 
-use crate::{game::CurrentSong, mic::{DeviceInstruction, DeviceResponse, FFTInfo, Mic, WINDOW_SIZE}, GameState};
+use crate::{game::{calculate_score, CurrentSong, SCORE_THRESHOLD}, mic::{DeviceInstruction, DeviceResponse, MagnitudeSpectrum, Mic, WINDOW_SIZE}, GameState};
 
 pub struct SettingsUiPlugin;
 
@@ -67,8 +67,7 @@ fn settings(
     mut next_state: ResMut<NextState<GameState>>,
     mut devices: ResMut<AvailableDevices>,
     mic: Res<Mic>,
-    mut fft_data: Local<Vec<f32>>,
-    mut srate: Local<f64>,
+    mut spectrum: Local<Option<MagnitudeSpectrum>>,
 ) {
     let ctx = contexts.ctx_mut();
     
@@ -104,28 +103,43 @@ fn settings(
         }
 
         if let Some(mir_receiver) = &mic.mir_receiver {
-            while let Ok(FFTInfo { data, progress, srate: s, .. }) = mir_receiver.try_recv() {
-                println!("Amplitude {:?} at time {:?}", data[18], progress);
-                *fft_data = data;
-                *srate = s as f64;
+            while let Ok(s) = mir_receiver.try_recv() {
+                *spectrum = Some(s);
             }
         }
         else {
-            *fft_data = Vec::new()
+            *spectrum = None
         }
 
         ui.separator();
 
-        if !fft_data.is_empty() {
-            let fft_line: PlotPoints = fft_data[0..fft_data.len()/2].iter().enumerate().skip(1).map(|(x, y)| {
-                let x = (x as f64 * *srate / WINDOW_SIZE as f64).log2();
+        if let Some(spectrum) = &*spectrum {
+            let spectrogram_line: PlotPoints = spectrum.data[0..spectrum.data.len()/2].iter().enumerate().skip(1).map(|(x, y)| {
+                let x = (x as f64 * (spectrum.srate as f64) / WINDOW_SIZE as f64).log2();
                 let y = *y as f64;
                 [x, y]
             }).collect();
-            let fft_line = Line::new(fft_line);
+            
+            let score_line: Vec<[f64; 2]> = (0..spectrum.data.len()/2).into_iter().skip(1).map(|x| {
+                let x = x as f64 * (spectrum.srate as f64)  / WINDOW_SIZE as f64;
+                let y = calculate_score(x as f32, &spectrum) as f64;
+                let x = x.log2();
+                [x, y]
+            }).collect();   
+
+            let threshold_line: Vec<[f64; 2]> = vec![[score_line[0][0], SCORE_THRESHOLD as f64], [score_line.last().unwrap()[0], SCORE_THRESHOLD as f64]];
+
+            let spectrogram_line = Line::new(spectrogram_line).color(Color32::from_rgb(255, 0, 0));
+            let score_line = Line::new(score_line).color(Color32::from_rgb(0, 0, 255));
+            let threshold_line = Line::new(threshold_line).color(Color32::from_rgb(0, 255, 0));
             
             egui_plot::Plot::new("FFT").include_y(200.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
-                plot_ui.line(fft_line)
+                plot_ui.line(spectrogram_line);
+            });
+
+            egui_plot::Plot::new("Score").include_y(400.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
+                plot_ui.line(score_line);
+                plot_ui.line(threshold_line);
             });
         }
         
