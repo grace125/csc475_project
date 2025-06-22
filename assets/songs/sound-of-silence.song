@@ -2,7 +2,7 @@
     backing: Some("songs/sound-of-silence.ogg"),
     bpm: 80,
     notes: [
-        	(tab: D3, fret: 0, beat: 4.0),	//m.2
+        (tab: D3, fret: 0, beat: 4.0),	//m.2
 		(tab: G3, fret: 2, beat: 4.5),
 		(tab: D3, fret: 3, beat: 5.0),
 		(tab: G3, fret: 2, beat: 5.5),

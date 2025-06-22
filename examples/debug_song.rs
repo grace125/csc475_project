@@ -1,7 +1,7 @@
 use std::{env, time::Duration};
 
 use bevy::{prelude::*, time::Stopwatch};
-use mir_project::songs::*;
+use mir_project::{game::CurrentSong, songs::*};
 
 fn main() {
     App::new()

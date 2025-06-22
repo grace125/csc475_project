@@ -14,9 +14,9 @@ pub const DESPAWN_Y_POS: f32 = -SPAWN_Y_POS;
 pub const SCROLL_TIME: f32 = 3.25;
 pub const COLUMN_SPACE: f32 = WIDTH/7.0;
 
-pub const SCORE_THRESHOLD: f32 = 350.0;
+pub const SCORE_THRESHOLD: f32 = 40.0;
 
-pub const HIT_FORGIVENESS: f32 = 0.12;
+pub const HIT_FORGIVENESS: f32 = 0.20;
 
 pub struct GamePlugin;
 
@@ -35,18 +35,19 @@ pub struct Backing;
 pub struct CurrentSong {
     latest_unplayed_note: usize,
     pub asset: Handle<Song>,
-    // pub speed: f32,
+    pub speed: f32,
     stopwatch: Stopwatch,
     success: usize,
 }
 
 impl CurrentSong {
-    pub fn new(asset: Handle<Song>) -> Self {
+    pub fn new(asset: Handle<Song>, speed: f32) -> Self {
         CurrentSong {
             asset,
             stopwatch: Stopwatch::new(),
             latest_unplayed_note: 0,
-            success: 0
+            success: 0,
+            speed,
         }
     }
 }
@@ -66,12 +67,12 @@ fn update_stopwatch(
     mut commands: Commands,
     time: Res<Time>,
     songs: Res<Assets<Song>>,
-    mut song: ResMut<CurrentSong>,
+    mut song_data: ResMut<CurrentSong>,
     mic: Res<Mic>,
 ) {
-    let prev_time = song.stopwatch.elapsed_secs();
-    song.stopwatch.tick(time.delta());
-    let this_time = song.stopwatch.elapsed_secs();
+    let prev_time = song_data.stopwatch.elapsed_secs();
+    song_data.stopwatch.tick(time.delta());
+    let this_time = song_data.stopwatch.elapsed_secs();
     
     if prev_time <= 0.0 && 0.0 <= this_time {
 
@@ -79,12 +80,12 @@ fn update_stopwatch(
             let _ = sender.send(MIRIntruction::SongStart);
         }
 
-        let song = songs.get(&song.asset).unwrap();
+        let song = songs.get(&song_data.asset).unwrap();
         if let Some(backing) = &song.backing {
             commands.spawn((
                 AudioSourceBundle {
                     source: backing.clone_weak(),
-                    settings: PlaybackSettings::DESPAWN,
+                    settings: PlaybackSettings::DESPAWN.with_speed(song_data.speed),
                 }, 
                 Backing
             ));
@@ -113,7 +114,7 @@ fn note_animator(
 ) {
     let song = songs.get(&song_data.asset).unwrap();
     
-    let elapsed_time = song_data.stopwatch.elapsed_secs();
+    let elapsed_time = song_data.stopwatch.elapsed_secs() * song_data.speed;
     let bps = song.bpm / 60.0;
 
     if song_data.latest_unplayed_note >= song.notes.len() && notes.is_empty() {
@@ -197,14 +198,14 @@ fn rhythm_calculator(
     if let Some(mir_receiver) = &mic.mir_receiver {
         while let Ok(fft_info) = mir_receiver.try_recv() {
             for (e, note, mut note_hit_data) in notes.iter_mut() {
-                let note_time = note.beat / bps; 
+                let note_time = note.beat / bps * song_data.speed; 
 
                 let diff = fft_info.progress.as_secs_f32() - note_time;
                 
                 if diff > HIT_FORGIVENESS {
                     commands.entity(e).remove::<NoteHitData>();
 
-                    println!("\nScores for note {:?}", note);
+                    // println!("\nScores for note {:?}", note);
                     for (diff, score) in note_hit_data.data.iter() {
                         println!("{:.0} at diff {:.6}", score.floor(), *diff);
                         if *score > SCORE_THRESHOLD {
@@ -247,21 +248,23 @@ pub fn calculate_score(pitch: f32, spectrum: &MagnitudeSpectrum) -> f32 {
     //     * spectrum.amplitude_at(third_harm)
     // ).powf(1.0/7.0);
 
-    let score = (
-        spectrum.amplitude_at(first_harm).powi(2)
-        * spectrum.amplitude_at(second_harm)
-        * spectrum.amplitude_at(third_harm)
-    ).powf(0.25);
+    // let score = (
+    //     spectrum.approx_amplitude_at(first_harm).powi(2)
+    //     * spectrum.approx_amplitude_at(second_harm)
+    //     * spectrum.approx_amplitude_at(third_harm)
+    // ).powf(0.25);
 
     // let score = (
     //     4.0*spectrum.amplitude_at(first_harm)
     //     + 2.0*spectrum.amplitude_at(second_harm)
     //     + spectrum.amplitude_at(third_harm)
-    // ).powf(1.0/7.0);
+    // ) / 7.0;
+
+    let score = spectrum.approx_amplitude_at(first_harm);
     
     // let score = spectrum.amplitude_at(first_harm);
     // let score = score / spectrum.mean_squared.sqrt(); //.max(0.05);
-    // let score = score / spectrum.mean_squared;
+    // let score = score / spectrum.rms.sqrt().max(0.05);
 
     score
 }

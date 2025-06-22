@@ -68,6 +68,7 @@ fn settings(
     mut devices: ResMut<AvailableDevices>,
     mic: Res<Mic>,
     mut spectrum: Local<Option<MagnitudeSpectrum>>,
+    mut speed: Local<f32>
 ) {
     let ctx = contexts.ctx_mut();
     
@@ -113,36 +114,43 @@ fn settings(
 
         ui.separator();
 
-        if let Some(spectrum) = &*spectrum {
-            let spectrogram_line: PlotPoints = spectrum.data[0..spectrum.data.len()/2].iter().enumerate().skip(1).map(|(x, y)| {
-                let x = (x as f64 * (spectrum.srate as f64) / WINDOW_SIZE as f64).log2();
-                let y = *y as f64;
-                [x, y]
-            }).collect();
-            
-            let score_line: Vec<[f64; 2]> = (0..spectrum.data.len()/2).into_iter().skip(1).map(|x| {
-                let x = x as f64 * (spectrum.srate as f64)  / WINDOW_SIZE as f64;
-                let y = calculate_score(x as f32, &spectrum) as f64;
-                let x = x.log2();
-                [x, y]
-            }).collect();   
+        ui.heading("Data");
 
-            let threshold_line: Vec<[f64; 2]> = vec![[score_line[0][0], SCORE_THRESHOLD as f64], [score_line.last().unwrap()[0], SCORE_THRESHOLD as f64]];
+        ui.separator();
 
-            let spectrogram_line = Line::new(spectrogram_line).color(Color32::from_rgb(255, 0, 0));
-            let score_line = Line::new(score_line).color(Color32::from_rgb(0, 0, 255));
-            let threshold_line = Line::new(threshold_line).color(Color32::from_rgb(0, 255, 0));
-            
-            egui_plot::Plot::new("FFT").include_y(200.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
-                plot_ui.line(spectrogram_line);
-            });
+        egui::ScrollArea::vertical().show(ui, |ui| {
 
-            egui_plot::Plot::new("Score").include_y(400.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
-                plot_ui.line(score_line);
-                plot_ui.line(threshold_line);
-            });
-        }
-        
+            if let Some(spectrum) = &*spectrum {
+                let spectrogram_line: PlotPoints = spectrum.data[0..spectrum.data.len()/2].iter().enumerate().skip(1).map(|(x, y)| {
+                    let x = (x as f64 * (spectrum.srate as f64) / WINDOW_SIZE as f64).log2();
+                    let y = *y as f64;
+                    [x, y]
+                }).collect();
+                
+                let score_line: Vec<[f64; 2]> = (0..spectrum.data.len()/2).into_iter().skip(1).map(|x| {
+                    let x = x as f64 * (spectrum.srate as f64)  / WINDOW_SIZE as f64;
+                    let y = calculate_score(x as f32, &spectrum) as f64;
+                    let x = x.log2();
+                    [x, y]
+                }).collect();   
+
+                let threshold_line: Vec<[f64; 2]> = vec![[score_line[0][0], SCORE_THRESHOLD as f64], [score_line.last().unwrap()[0], SCORE_THRESHOLD as f64]];
+
+                let spectrogram_line = Line::new(spectrogram_line).color(Color32::from_rgb(255, 0, 0));
+                let score_line = Line::new(score_line).color(Color32::from_rgb(0, 0, 255));
+                let threshold_line = Line::new(threshold_line).color(Color32::from_rgb(0, 255, 0));
+                
+                egui_plot::Plot::new("FFT").include_y(200.0).include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
+                    plot_ui.line(spectrogram_line);
+                });
+
+                egui_plot::Plot::new("Score").include_y(0.0).view_aspect(2.0).show(ui, |plot_ui| {
+                    plot_ui.line(score_line);
+                    plot_ui.line(threshold_line);
+                });
+            }
+
+        })
     });
 
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -155,16 +163,24 @@ fn settings(
         ui.selectable_value(selected_song, Some(SelectedSong::TwinkleTwinkle), "Twinkle Twinkle Little Star");
         ui.selectable_value(selected_song, Some(SelectedSong::SoundOfSilence), "Sound of Silence");
 
+        ui.separator();
+
+        if *speed == 0.0 {
+            *speed = 1.0; // FIXME: this is a bad way to set a default
+        }
+        ui.add(egui::Slider::new(&mut *speed, 0.25..=1.5).text("Speed"));
+
+        ui.separator();
         
         if ui.add_enabled(selected_song.is_some() && devices.connected.is_some(), egui::Button::new("Play")).clicked() {
-            commands.insert_resource(CurrentSong::new(
-                match selected_song {
-                    Some(SelectedSong::TestSong)        => asset_server.load("songs/test.song"),
-                    Some(SelectedSong::TwinkleTwinkle)  => asset_server.load("songs/twinkle-twinkle.song"),
-                    Some(SelectedSong::SoundOfSilence)  => asset_server.load("songs/sound-of-silence.song"),
-                    None => unreachable!()
-                }
-            ));
+            let song_asset = match selected_song {
+                Some(SelectedSong::TestSong)        => asset_server.load("songs/test.song"),
+                Some(SelectedSong::TwinkleTwinkle)  => asset_server.load("songs/twinkle-twinkle.song"),
+                Some(SelectedSong::SoundOfSilence)  => asset_server.load("songs/sound-of-silence.song"),
+                None => unreachable!(), 
+            };
+            commands.insert_resource(CurrentSong::new(song_asset, *speed));
+                
             next_state.set(GameState::SongLoading);
         }
     });

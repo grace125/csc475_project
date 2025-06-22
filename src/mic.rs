@@ -1,12 +1,13 @@
 
 use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, BuildStreamError, DefaultStreamConfigError, Device, InputCallbackInfo, SampleFormat, Stream, StreamConfig, StreamInstant};
 use bevy::prelude::*;
-use rustfft::{num_complex::{Complex, ComplexFloat}, Fft, FftPlanner};
+use rustfft::{num_complex::{Complex, ComplexFloat}, num_traits::Float, Fft, FftPlanner};
 use std::{collections::VecDeque, fmt::Debug, sync::Arc, time::Duration};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
 pub const WINDOW_SIZE: usize = 8192;
-pub const HOP_SIZE: usize = 1024;
+pub const HOP_SIZE: usize = 2048;
+pub const PITCH_APPROXIMATION: f32 = 1.005792941; // 10 cents //1.0116194403; // 20 cents 
 
 pub struct MicPlugin;
 
@@ -80,6 +81,20 @@ impl MagnitudeSpectrum {
         let right_bin = (left_bin + 1) % self.data.len();
         let t = continuous_bin % 1.0;
         self.data[left_bin]*(1.0-t) + self.data[right_bin]*t
+    }
+
+    pub fn approx_amplitude_at(&self, pitch: f32) -> f32 {
+        let min_pitch = pitch / PITCH_APPROXIMATION;
+        let max_pitch = pitch * PITCH_APPROXIMATION;
+
+        let left = (min_pitch / self.srate * WINDOW_SIZE as f32) as usize;
+        let right = (max_pitch / self.srate * WINDOW_SIZE as f32).ceil() as usize;
+
+        let max = (left..=right).into_iter()
+            .map(|i| self.data[i % self.data.len()])
+            .reduce(|a, b| if a > b { a } else { b })
+            .unwrap();
+        max
     }
 }
 
